@@ -36,3 +36,35 @@ export const createInspectionSchema = z
   });
 
 export type CreateInspectionInput = z.infer<typeof createInspectionSchema>;
+
+// US-030-style edit (skeleton subset): editable job + customer/vehicle basics.
+export const updateInspectionSchema = z
+  .object({
+    appointmentStatus: z.enum(["not_appointed", "appointed"]).optional(),
+    notSurveyReason: z.string().trim().optional(),
+    customer: z
+      .object({
+        name: z.string().trim().min(1).optional(),
+        mobile: z.string().trim().regex(/^[0-9]{9,10}$/, "เบอร์มือถือไม่ถูกต้อง").optional(),
+      })
+      .optional(),
+    vehicle: z
+      .object({
+        licensePlate: z.string().trim().regex(/^[^\s-]+$/, "ทะเบียนห้ามมีขีดหรือเว้นวรรค").optional(),
+        province: z.string().trim().min(1).optional(),
+      })
+      .optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, { message: "ไม่มีข้อมูลที่จะแก้ไข" });
+
+export type UpdateInspectionInput = z.infer<typeof updateInspectionSchema>;
+
+// List/search/filter + pagination (US-017 pattern).
+export const listInspectionQuerySchema = z.object({
+  q: z.string().trim().optional(), // matches jobNo / license plate / customer name
+  status: z.string().trim().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().refine((n) => [10, 20, 50, 100].includes(n), "limit ต้องเป็น 10/20/50/100").default(20),
+});
+
+export type ListInspectionQuery = z.infer<typeof listInspectionQuerySchema>;

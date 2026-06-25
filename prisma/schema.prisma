@@ -120,11 +120,13 @@ model InspectionJob {
   vehicle  Vehicle?
   history  JobHistory[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at") // soft delete (D-004)
 
   @@index([ownerUserId, status, createdAt])
   @@index([status])
+  @@index([deletedAt])
   @@map("inspection_jobs")
 }
 

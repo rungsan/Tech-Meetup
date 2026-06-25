@@ -2,7 +2,7 @@ import { SpanStatusCode } from "@opentelemetry/api";
 import { db } from "../db";
 import { requestLogger } from "../logger";
 import { tracer, createJobCounter, createJobDuration } from "../observability/otel";
-import type { CreateInspectionInput } from "./schema";
+import type { CreateInspectionInput, UpdateInspectionInput, ListInspectionQuery } from "./schema";
 
 function genJobNo(): string {
   const y = new Date().getFullYear();
@@ -95,8 +95,8 @@ export async function createInspection(input: CreateInspectionInput, ctx: Create
 }
 
 export async function getInspection(id: string) {
-  return db.inspectionJob.findUnique({
-    where: { id },
+  return db.inspectionJob.findFirst({
+    where: { id, deletedAt: null },
     include: {
       vehicle: { include: { model: { include: { brand: true } } } },
       customer: true,
@@ -104,5 +104,73 @@ export async function getInspection(id: string) {
       businessDiv: true,
       history: { orderBy: { performedAt: "asc" } },
     },
+  });
+}
+
+/** Search / filter / paginate (US-017 pattern). Excludes soft-deleted. */
+export async function listInspections(q: ListInspectionQuery) {
+  const where: Record<string, unknown> = { deletedAt: null };
+  if (q.status) where.status = q.status;
+  if (q.q) {
+    where.OR = [
+      { jobNo: { contains: q.q, mode: "insensitive" } },
+      { vehicle: { licensePlate: { contains: q.q, mode: "insensitive" } } },
+      { customer: { name: { contains: q.q, mode: "insensitive" } } },
+    ];
+  }
+  const [data, total] = await Promise.all([
+    db.inspectionJob.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (q.page - 1) * q.limit,
+      take: q.limit,
+      include: { vehicle: true, customer: true },
+    }),
+    db.inspectionJob.count({ where }),
+  ]);
+  return { data, page: q.page, limit: q.limit, total };
+}
+
+/** Edit a job + write an audit row (US-030 pattern). */
+export async function updateInspection(id: string, patch: UpdateInspectionInput, ctx: CreateContext) {
+  const log = requestLogger(ctx.requestId);
+  return tracer.startActiveSpan("inspection.update", async (span) => {
+    try {
+      const existing = await db.inspectionJob.findFirst({ where: { id, deletedAt: null } });
+      if (!existing) return null;
+      const updated = await db.$transaction(async (tx) => {
+        const job = await tx.inspectionJob.update({
+          where: { id },
+          data: {
+            appointmentStatus: patch.appointmentStatus,
+            notSurveyReason: patch.notSurveyReason,
+            ...(patch.customer && { customer: { update: patch.customer } }),
+            ...(patch.vehicle && { vehicle: { update: patch.vehicle } }),
+          },
+        });
+        await tx.jobHistory.create({
+          data: { jobId: id, action: "updated", detail: "แก้ไขข้อมูลงาน", performedBy: ctx.userId },
+        });
+        return job;
+      });
+      log.info({ jobId: id }, "inspection.update done");
+      span.setAttribute("job.id", id);
+      return updated;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+/** Soft delete + audit (D-004). */
+export async function softDeleteInspection(id: string, ctx: CreateContext) {
+  const existing = await db.inspectionJob.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return null;
+  return db.$transaction(async (tx) => {
+    const job = await tx.inspectionJob.update({ where: { id }, data: { deletedAt: new Date() } });
+    await tx.jobHistory.create({
+      data: { jobId: id, action: "deleted", detail: "ลบรายการ (soft)", performedBy: ctx.userId },
+    });
+    return job;
   });
 }
