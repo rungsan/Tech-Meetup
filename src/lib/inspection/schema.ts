@@ -63,6 +63,7 @@ export type UpdateInspectionInput = z.infer<typeof updateInspectionSchema>;
 export const listInspectionQuerySchema = z.object({
   q: z.string().trim().optional(), // matches jobNo / license plate / customer name
   status: z.string().trim().optional(),
+  scope: z.enum(["all", "mine"]).default("all"), // mine = owned by current user (US-007)
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().refine((n) => [10, 20, 50, 100].includes(n), "limit ต้องเป็น 10/20/50/100").default(20),
 });

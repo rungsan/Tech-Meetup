@@ -107,9 +107,10 @@ export async function getInspection(id: string) {
   });
 }
 
-/** Search / filter / paginate (US-017 pattern). Excludes soft-deleted. */
-export async function listInspections(q: ListInspectionQuery) {
+/** Search / filter / paginate (US-017). scope=mine filters by owner (US-007). Excludes soft-deleted. */
+export async function listInspections(q: ListInspectionQuery, currentUserId?: string) {
   const where: Record<string, unknown> = { deletedAt: null };
+  if (q.scope === "mine" && currentUserId) where.ownerUserId = currentUserId;
   if (q.status) where.status = q.status;
   if (q.q) {
     where.OR = [
@@ -159,6 +160,19 @@ export async function updateInspection(id: string, patch: UpdateInspectionInput,
     } finally {
       span.end();
     }
+  });
+}
+
+/** Assign a job to a user (US-008 "Assign to me") + audit. */
+export async function assignInspection(id: string, userId: string) {
+  const existing = await db.inspectionJob.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return null;
+  return db.$transaction(async (tx) => {
+    const job = await tx.inspectionJob.update({ where: { id }, data: { ownerUserId: userId } });
+    await tx.jobHistory.create({
+      data: { jobId: id, action: "assigned", detail: "รับงานเข้ารายการของฉัน", performedBy: userId },
+    });
+    return job;
   });
 }
 

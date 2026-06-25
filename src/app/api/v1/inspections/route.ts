@@ -42,5 +42,5 @@ export async function GET(req: Request) {
     const fields = Object.fromEntries(parsed.error.issues.map((i) => [i.path.join("."), i.message]));
     return apiError("VALIDATION_ERROR", "พารามิเตอร์ค้นหาไม่ถูกต้อง", fields);
   }
-  return apiOk(await listInspections(parsed.data));
+  return apiOk(await listInspections(parsed.data, user.id));
 }
