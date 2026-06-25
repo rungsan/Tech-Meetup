@@ -1,0 +1,6 @@
+# Local agent settings (machine-specific)
+.claude/
+.opencode/
+.codex/
+ai-sdlc/
+
