@@ -4,3 +4,25 @@
 .codex/
 ai-sdlc/
 
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+next-env.d.ts
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+!.env.development
+
+# Prisma
+prisma/generated/
+
+# Test / misc
+coverage/
+playwright-report/
+test-results/
+*.log
+.DS_Store

@@ -1,0 +1,19 @@
+# Local development infrastructure — app runs natively (pnpm dev)
+# Start with: docker compose up -d
+services:
+  postgres:
+    image: postgres:16
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cis}
+      POSTGRES_USER: ${DB_USER:-dev}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev"]
+      interval: 5s
+      retries: 5
+
+volumes:
+  pgdata:

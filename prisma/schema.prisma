@@ -1,0 +1,158 @@
+// CIS — Prisma schema (B0 walking-skeleton subset). Conventions: D-004.
+// Full 19-entity model authored in B1. snake_case via @map, cuid PK, audit cols.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  system    String   // "abc" | "emotor"
+  users     User[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  system       String // "abc" | "emotor"
+  authProvider String   @map("auth_provider") // "azure" | "local" | "stub"
+  email        String?  @unique
+  username     String?  @unique
+  passwordHash String?  @map("password_hash")
+  displayName  String   @map("display_name")
+  roleId       String   @map("role_id")
+  role         Role     @relation(fields: [roleId], references: [id])
+  status       String   @default("active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  jobsCreated InspectionJob[] @relation("JobCreatedBy")
+  jobsOwned   InspectionJob[] @relation("JobOwner")
+
+  @@map("users")
+}
+
+model Source {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  jobs      InspectionJob[]
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@map("sources")
+}
+
+model BusinessDivision {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  jobs      InspectionJob[]
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@map("business_divisions")
+}
+
+model VehicleBrand {
+  id        String         @id @default(cuid())
+  name      String         @unique
+  status    String         @default("active")
+  models    VehicleModel[]
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  @@map("vehicle_brands")
+}
+
+model VehicleModel {
+  id          String       @id @default(cuid())
+  brandId     String       @map("brand_id")
+  brand       VehicleBrand @relation(fields: [brandId], references: [id])
+  name        String
+  vehicleType String       @map("vehicle_type") // "non_ev" | "ev"
+  status      String       @default("active")
+  vehicles    Vehicle[]
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  @@unique([brandId, name])
+  @@map("vehicle_models")
+}
+
+model Customer {
+  id            String         @id @default(cuid())
+  type          String // "individual" | "corporate"
+  name          String?
+  corporateName String?        @map("corporate_name")
+  mobile        String
+  job           InspectionJob? @relation(fields: [jobId], references: [id])
+  jobId         String?        @unique @map("job_id")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  @@map("customers")
+}
+
+model InspectionJob {
+  id                String   @id @default(cuid())
+  jobNo             String   @unique @map("job_no")
+  status            String   @default("new") // 8-state workflow (see api-design)
+  customerType      String   @map("customer_type")
+  sourceId          String   @map("source_id")
+  source            Source   @relation(fields: [sourceId], references: [id])
+  businessDivId     String   @map("business_div_id")
+  businessDiv       BusinessDivision @relation(fields: [businessDivId], references: [id])
+  coverageStartDate DateTime @map("coverage_start_date")
+  appointmentStatus String   @map("appointment_status") // "not_appointed" | "appointed"
+  notSurveyReason   String?  @map("not_survey_reason")
+  notifyEmails      String?  @map("notify_emails") // ";"-separated (D-004)
+
+  createdById String @map("created_by")
+  createdBy   User   @relation("JobCreatedBy", fields: [createdById], references: [id])
+  ownerUserId String? @map("owner_user_id")
+  owner       User?   @relation("JobOwner", fields: [ownerUserId], references: [id])
+
+  customer Customer?
+  vehicle  Vehicle?
+  history  JobHistory[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerUserId, status, createdAt])
+  @@index([status])
+  @@map("inspection_jobs")
+}
+
+model Vehicle {
+  id           String        @id @default(cuid())
+  jobId        String        @unique @map("job_id")
+  job          InspectionJob @relation(fields: [jobId], references: [id])
+  licensePlate String        @map("license_plate")
+  province     String // "99" when red plate
+  isRedPlate   Boolean       @default(false) @map("is_red_plate")
+  brandId      String        @map("brand_id")
+  modelId      String        @map("model_id")
+  model        VehicleModel  @relation(fields: [modelId], references: [id])
+  chassisNo    String?       @map("chassis_no")
+  vehicleType  String        @map("vehicle_type") // "non_ev" | "ev"
+
+  @@map("vehicles")
+}
+
+model JobHistory {
+  id          String        @id @default(cuid())
+  jobId       String        @map("job_id")
+  job         InspectionJob @relation(fields: [jobId], references: [id])
+  action      String
+  detail      String?
+  performedBy String        @map("performed_by")
+  performedAt DateTime      @default(now()) @map("performed_at")
+
+  @@index([jobId, performedAt])
+  @@map("job_history")
+}
